@@ -11,7 +11,7 @@ public class ChatController {
     @Autowired
     TestAssistant assistant;
 
-    @GetMapping("/chat")
+    @GetMapping("/deep-chat")
     public String chat(String message) {
         return assistant.chat(message);
     }

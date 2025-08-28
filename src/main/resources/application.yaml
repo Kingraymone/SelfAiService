@@ -1,3 +1,12 @@
 server:
   port: 8033
+# Mandatory properties:
+langchain4j:
+  open-ai:
+    chatModel:
+      base-url: https://api.deepseek.com/chat/completions
+      api-key: ${deepseek-api-key}
+      modelName: deepseek-chat
+      logRequests: true
+      log-responses: true
 
