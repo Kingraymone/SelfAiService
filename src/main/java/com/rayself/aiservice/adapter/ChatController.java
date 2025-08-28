@@ -18,13 +18,12 @@ public class ChatController {
 
     @GetMapping("/chat")
     public String test(@RequestParam String msg) {
-        log.info(msg);
-        return msg;
+        return assistant.chat(msg);
     }
 
     @PostMapping("/chat-stream")
     public String chatStream(@RequestBody Object msg) {
-        return msg.toString();
+        return assistant.chat(msg.toString());
     }
 
 }

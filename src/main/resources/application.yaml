@@ -4,7 +4,7 @@ server:
 langchain4j:
   open-ai:
     chatModel:
-      base-url: https://api.deepseek.com/chat/completions
+      base-url: https://api.deepseek.com
       api-key: ${deepseek-api-key}
       modelName: deepseek-chat
       logRequests: true
