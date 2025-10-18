@@ -13,17 +13,17 @@ public class ChatController {
 
     @GetMapping("/deep-chat")
     public String chat(String message) {
-        return assistant.chat(message);
+        return assistant.chat(1, message);
     }
 
     @GetMapping("/chat")
     public String test(@RequestParam String msg) {
-        return assistant.chat(msg);
+        return assistant.chat(2, msg);
     }
 
     @PostMapping("/chat-stream")
     public String chatStream(@RequestBody Object msg) {
-        return assistant.chat(msg.toString());
+        return assistant.chat(3, msg.toString());
     }
 
 }
