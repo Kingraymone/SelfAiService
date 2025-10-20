@@ -9,4 +9,16 @@ langchain4j:
       modelName: deepseek-chat
       logRequests: true
       log-responses: true
+    streaming-chat-model:
+      base-url: https://api.deepseek.com
+      api-key: ${deepseek-api-key}
+      model-name: deepseek-chat
+      logRequests: true
+      log-responses: true
+#  ollama:
+#    streaming-chat-model:
+#      base-url: http://localhost:11434
+#      model-name: qwen3:4b
+#      logRequests: true
+#      log-responses: true
 

@@ -9,6 +9,6 @@ import org.springframework.context.annotation.Configuration;
 public class AgentConfig {
     @Bean("openAiMemoryProvider")
     public ChatMemoryProvider chatMemoryProvider(){
-        return memoryId -> MessageWindowChatMemory.withMaxMessages(2);
+        return memoryId -> MessageWindowChatMemory.withMaxMessages(4);
     }
 }
