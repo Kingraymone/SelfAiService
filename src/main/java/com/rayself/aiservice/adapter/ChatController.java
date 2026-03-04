@@ -48,7 +48,8 @@ public class ChatController {
         SseEmitter emitter = new SseEmitter(0L); // 永不超时
         Flux<String> contentFlux = assistant.chat(msg.toString());
         // 转换为 ServerSentEvent 格式
-        return contentFlux.map(token -> ServerSentEvent.builder(token).event("message").id("123").retry(Duration.ofSeconds(2)).comment("test").build());
+//        return contentFlux.map(token -> ServerSentEvent.builder(token).event("message").id("123").retry(Duration.ofSeconds(2)).comment("test").build());
+        return null;
     }
 
     @GetMapping("/agent-chat")

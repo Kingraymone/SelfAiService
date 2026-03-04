@@ -14,5 +14,5 @@ public interface TestAssistant {
 
     Flux<String> chat(@UserMessage String message);
 
-    TokenStream chat(@UserMessage String message);
+    TokenStream chat2(@UserMessage String message);
 }
