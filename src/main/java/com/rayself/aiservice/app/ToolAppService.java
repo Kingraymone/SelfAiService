@@ -1,13 +1,13 @@
 package com.rayself.aiservice.app;
 
 import com.alibaba.fastjson.JSONObject;
+import com.rayself.aiservice.infrastructure.utils.FileUtils;
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.agent.tool.ToolSpecification;
+import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,56 +38,70 @@ public class ToolAppService {
     }
 
     @Tool
-    public static String executeCommand(JSONObject jsonObject) {
+    public static String runBash(JSONObject jsonObject) {
         String command = jsonObject.getString("command");
-        StringBuilder output = new StringBuilder();
-        StringBuilder error = new StringBuilder();
-
-        try {
-            Process process = Runtime.getRuntime().exec(getShellCommand(command).toArray(new String[0]));
-
-            // 读取正常输出流
-            Thread outputReader = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getInputStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        output.append(line).append("\n");
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
-
-            // 读取错误流
-            Thread errorReader = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getErrorStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        error.append(line).append("\n");
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
-
-            outputReader.start();
-            errorReader.start();
-
-            int exitCode = process.waitFor();
-            outputReader.join();
-            errorReader.join();
-
-            if (exitCode != 0) {
-                System.err.println("Command failed with exit code: " + exitCode);
-                System.err.println("Error: " + error.toString());
-            }
-
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        return output.toString();
+        return FileUtils.runBash(command);
     }
+
+    public static String readFile(JSONObject jsonObject) {
+        String path = jsonObject.getString("path");
+        Integer limit = jsonObject.getInteger("limit");
+        return FileUtils.runRead(path, limit);
+    }
+
+    public static String writeFile(JSONObject jsonObject) {
+        String path = jsonObject.getString("path");
+        String content = jsonObject.getString("content");
+        return FileUtils.runWrite(path, content);
+    }
+
+    public static String editFile(JSONObject jsonObject) {
+        String path = jsonObject.getString("path");
+        String oldText = jsonObject.getString("oldText");
+        String newText = jsonObject.getString("newText");
+        return FileUtils.runEdit(path, oldText, newText);
+    }
+
+    public List<ToolSpecification> toolSpecification() {
+        List<ToolSpecification> tools = new ArrayList<>();
+        tools.add(ToolSpecification.builder()
+                .name("runBash")
+                .description("Run a shell command.")
+                .parameters(JsonObjectSchema.builder()
+                        .addStringProperty("command", "bash执行的命令")
+                        .required("command") // 必须明确指定必需的属性
+                        .build())
+                .build());
+        tools.add(ToolSpecification.builder()
+                .name("readFile")
+                .description("Read file contents.")
+                .parameters(JsonObjectSchema.builder()
+                        .addStringProperty("path", "文件路径")
+                        .addIntegerProperty("limit", "最大行数")
+                        .required("path") // 必须明确指定必需的属性
+                        .build())
+                .build());
+        tools.add(ToolSpecification.builder()
+                .name("writeFile")
+                .description("Write content to file.")
+                .parameters(JsonObjectSchema.builder()
+                        .addStringProperty("path", "文件路径")
+                        .addStringProperty("content", "文件内容")
+                        .required("path", "content") // 必须明确指定必需的属性
+                        .build())
+                .build());
+        tools.add(ToolSpecification.builder()
+                .name("editFile")
+                .description("Replace exact text in file.")
+                .parameters(JsonObjectSchema.builder()
+                        .addStringProperty("path", "文件路径")
+                        .addStringProperty("oldText", "旧文件内容")
+                        .addStringProperty("newText", "新文件内容")
+                        .required("path", "oldText", "newText") // 必须明确指定必需的属性
+                        .build())
+                .build());
+        return tools;
+    }
+
+
 }

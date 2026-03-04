@@ -1,16 +1,10 @@
 package com.rayself.aiservice.app;
 
-import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
-import dev.langchain4j.agent.tool.ToolSpecification;
-import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.ToolExecutionResultMessage;
-import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.message.*;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
-import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.ObjectUtils;
 
 import java.lang.reflect.Method;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -50,11 +45,18 @@ public class AgentAppService {
                 .build();
         // todo 系统消息增加
         List<ChatMessage> messageList = new ArrayList<>();
-        SystemMessage systemMessage = SystemMessage.from("You are a coding agent at {os.getcwd()}. Use bash to solve tasks. Act, don't explain.");
+        SystemMessage systemMessage = SystemMessage.from(String.format("You are a coding agent at %s. OS: %s. Use tools to solve tasks. Act, don't explain.",
+                Paths.get(System.getProperty("user.dir")), System.getProperty("os.name").toLowerCase()));
         messageList.add(systemMessage);
-        messageList.add(UserMessage.from(String.format(USER_MSG_TEMPLATE, IS_WINDOWS ? "window" : "linux", message)));
+        messageList.add(UserMessage.from(String.format(message)));
         agentLoop(model, messageList);
-        return messageList.get(messageList.size() - 1).toString();
+        ChatMessage chatMessage = messageList.get(messageList.size() - 1);
+        if (chatMessage instanceof AiMessage) {
+            return ((AiMessage) chatMessage).text();
+        } else if (chatMessage instanceof UserMessage) {
+            return ((UserMessage) chatMessage).singleText();
+        }
+        return chatMessage.toString();
     }
 
     private void agentLoop(OpenAiChatModel model, List<ChatMessage> messageList) {
@@ -64,7 +66,7 @@ public class AgentAppService {
                     .messages(messageList)
                     .parameters(ChatRequestParameters.builder()
                             .temperature(0.5)
-                            .toolSpecifications(toolSpecification())
+                            .toolSpecifications(toolAppService.toolSpecification())
                             .build())
                     .build();
             ChatResponse chatResponse = model.chat(request);
@@ -95,16 +97,6 @@ public class AgentAppService {
         }
     }
 
-    public ToolSpecification toolSpecification() {
-        return ToolSpecification.builder()
-                .name("executeCommand")
-                .description("Run a shell command.")
-                .parameters(JsonObjectSchema.builder()
-                        .addStringProperty("command", "bash执行的命令")
-                        .required("command") // 必须明确指定必需的属性
-                        .build())
-                .build();
-    }
 
     public Map<String, Method> findToolMap() {
         Map<String, Method> map = new HashMap<>();
