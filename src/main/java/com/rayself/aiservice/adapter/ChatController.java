@@ -1,8 +1,8 @@
 package com.rayself.aiservice.adapter;
 
+import com.rayself.aiservice.app.AgentAppService;
 import com.rayself.aiservice.infrastructure.agent.TestAssistant;
-import com.rayself.aiservice.infrastructure.agent.TestAssistant2;
-import dev.langchain4j.service.TokenStream;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -18,8 +18,8 @@ import java.time.Duration;
 public class ChatController {
     @Autowired
     TestAssistant assistant;
-    @Autowired
-    TestAssistant2 assistant2;
+    @Resource
+    AgentAppService agentAppService;
 
     @GetMapping("/deep-chat")
     public String chat(String message) {
@@ -44,37 +44,18 @@ public class ChatController {
     }
 
     @RequestMapping(value = "/chat-sse-emitter", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter chatSseEmitter(@RequestBody Object msg) {
+    public SseEmitter  chatSseEmitter(@RequestBody Object msg) {
         SseEmitter emitter = new SseEmitter(0L); // 永不超时
-        TokenStream stream = assistant2.chat(msg.toString());
-        // 调用流式接口
-        // 订阅 Token 事件
-        stream.onPartialResponse(token -> {
-            try {
-                emitter.send(SseEmitter.event().data(token));
-            } catch (Exception e) {
-                emitter.completeWithError(e);
-            }
-        });
-
-        stream.onError(error -> {
-            try {
-                emitter.send(SseEmitter.event().data(error.getMessage()).name("error"));
-            } catch (Exception ignored) {
-            }
-            emitter.completeWithError(error);
-        });
-
-        stream.onCompleteResponse(message -> {
-            try {
-//                emitter.send("event:done\ndata:[DONE]\n\n");
-            } catch (Exception ignored) {
-            }
-            emitter.complete();
-        });
-        // 阻塞等待流结束（内部异步）
-        stream.start();
-        return emitter;
+        Flux<String> contentFlux = assistant.chat(msg.toString());
+        // 转换为 ServerSentEvent 格式
+//        return contentFlux.map(token -> ServerSentEvent.builder(token).event("message").id("123").retry(Duration.ofSeconds(2)).comment("test").build());
+        return null;
     }
+
+    @GetMapping("/agent-chat")
+    public String agentChart(@RequestParam String msg) {
+        return agentAppService.agentChat(msg);
+    }
+
 
 }

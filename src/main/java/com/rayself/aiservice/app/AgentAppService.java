@@ -1,6 +1,12 @@
 package com.rayself.aiservice.app;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
@@ -8,13 +14,15 @@ import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.ObjectUtils;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static java.time.Duration.ofSeconds;
 
@@ -22,10 +30,17 @@ import static java.time.Duration.ofSeconds;
 @Slf4j
 public class AgentAppService {
     private static final boolean IS_WINDOWS = System.getProperty("os.name").toLowerCase().contains("win");
+    private static final String USER_MSG_TEMPLATE = "[用户操作系统]：%s" +
+            "\n" +
+            "[用户消息]：%s";
+    @Autowired
+    ToolAppService toolAppService;
+
 
     public String agentChat(String message) {
         // 模型
         OpenAiChatModel model = OpenAiChatModel.builder()
+                .baseUrl("https://api.deepseek.com")
                 .apiKey(System.getenv("deepseek-api-key"))
                 .modelName("deepseek-chat")
                 .temperature(0.5)
@@ -34,31 +49,56 @@ public class AgentAppService {
                 .logResponses(true)
                 .build();
         // todo 系统消息增加
-        // 消息
-        ChatRequest request = ChatRequest.builder()
-                .messages(UserMessage.from(message))
-                .parameters(ChatRequestParameters.builder()
-                        .temperature(0.5)
-                        .toolSpecifications(toolSpecification())
-                        .build())
-                .build();
-        while(true){
+        List<ChatMessage> messageList = new ArrayList<>();
+        SystemMessage systemMessage = SystemMessage.from("You are a coding agent at {os.getcwd()}. Use bash to solve tasks. Act, don't explain.");
+        messageList.add(systemMessage);
+        messageList.add(UserMessage.from(String.format(USER_MSG_TEMPLATE, IS_WINDOWS ? "window" : "linux", message)));
+        agentLoop(model, messageList);
+        return messageList.get(messageList.size() - 1).toString();
+    }
+
+    private void agentLoop(OpenAiChatModel model, List<ChatMessage> messageList) {
+        while (true) {
+            // 消息
+            ChatRequest request = ChatRequest.builder()
+                    .messages(messageList)
+                    .parameters(ChatRequestParameters.builder()
+                            .temperature(0.5)
+                            .toolSpecifications(toolSpecification())
+                            .build())
+                    .build();
             ChatResponse chatResponse = model.chat(request);
+            // 模型消息追加
+            messageList.add(chatResponse.aiMessage());
             if (!chatResponse.aiMessage().hasToolExecutionRequests()) {
                 break;
             }
             // todo 获取执行结果中存在方法调用的信息，调用命令行参数
-            UserMessage toolResult = UserMessage.from("tool_result");
-            request.messages().add(toolResult);
+            Map<String, Method> toolMap = findToolMap();
+            for (ToolExecutionRequest executionRequest : chatResponse.aiMessage().toolExecutionRequests()) {
+                Method method = toolMap.get(executionRequest.name());
+                if (ObjectUtils.isEmpty(method)) {
+                    continue;
+                }
+                String toolResultContent = "";
+                try {
+                    // 工具方法名匹配，获取参数执行方法调用
+                    JSONObject jsonObject = JSONObject.parseObject(executionRequest.arguments());
+                    Object result = method.invoke(toolAppService, jsonObject);
+                    toolResultContent = result.toString();
+                } catch (Exception e) {
+                    log.error(e.getMessage(), e);
+                    return;
+                }
+                messageList.add(ToolExecutionResultMessage.from(executionRequest, toolResultContent));
+            }
         }
-
-        return null;
     }
 
-    public ToolSpecification toolSpecification(){
+    public ToolSpecification toolSpecification() {
         return ToolSpecification.builder()
-                .name("bash")
-                .description("bash命令行工具")
+                .name("executeCommand")
+                .description("Run a shell command.")
                 .parameters(JsonObjectSchema.builder()
                         .addStringProperty("command", "bash执行的命令")
                         .required("command") // 必须明确指定必需的属性
@@ -66,80 +106,16 @@ public class AgentAppService {
                 .build();
     }
 
-    /**
-     * 获取系统相关的命令解释器
-     */
-    public static List<String> getShellCommand(String command) {
-        List<String> cmdList = new ArrayList<>();
-
-        if (IS_WINDOWS) {
-            // Windows使用cmd.exe
-            cmdList.add("powershell.exe");
-            cmdList.add("-Command");
-            cmdList.add(command);
-        } else {
-            // Linux/Unix/Mac使用/bin/sh
-            cmdList.add("/bin/sh");
-            cmdList.add("-c");
-            cmdList.add(command);
+    public Map<String, Method> findToolMap() {
+        Map<String, Method> map = new HashMap<>();
+        for (Method method : ToolAppService.class.getDeclaredMethods()) {
+            map.put(method.getName(), method);
         }
-
-        return cmdList;
+        return map;
     }
 
-    public static String executeCommand(String command) {
-        StringBuilder output = new StringBuilder();
-        StringBuilder error = new StringBuilder();
-
-        try {
-            Process process = Runtime.getRuntime().exec(getShellCommand(command).toArray(new String[0]));
-
-            // 读取正常输出流
-            Thread outputReader = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getInputStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        output.append(line).append("\n");
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
-
-            // 读取错误流
-            Thread errorReader = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getErrorStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        error.append(line).append("\n");
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
-
-            outputReader.start();
-            errorReader.start();
-
-            int exitCode = process.waitFor();
-            outputReader.join();
-            errorReader.join();
-
-            if (exitCode != 0) {
-                System.err.println("Command failed with exit code: " + exitCode);
-                System.err.println("Error: " + error.toString());
-            }
-
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        return output.toString();
-    }
 
     public static void main(String[] args) {
-        System.out.println(executeCommand("dir"));
+//        System.out.println(executeCommand("dir"));
     }
 }
