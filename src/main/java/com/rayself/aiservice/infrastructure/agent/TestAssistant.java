@@ -2,6 +2,7 @@ package com.rayself.aiservice.infrastructure.agent;
 
 import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.SystemMessage;
+import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.spring.AiService;
 import reactor.core.publisher.Flux;
@@ -12,4 +13,6 @@ public interface TestAssistant {
     String chat(@MemoryId int memoryId, @UserMessage String message);
 
     Flux<String> chat(@UserMessage String message);
+
+    TokenStream chat(@UserMessage String message);
 }
