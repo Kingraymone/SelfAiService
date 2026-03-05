@@ -52,7 +52,7 @@ public class FileUtils {
     }
 
     public static Path safePath(String p) throws IOException {
-        Path path = WORKDIR.resolve(p).toRealPath();
+        Path path = WORKDIR.resolve(p).normalize();
         if (!path.startsWith(WORKDIR)) {
             throw new SecurityException("Path escapes workspace: " + p);
         }
@@ -110,6 +110,9 @@ public class FileUtils {
     public static String runRead(String path, Integer limit) {
         try {
             Path safePath = safePath(path);
+            if (!Files.exists(safePath)) {
+                return "Error: File not found at " + path;
+            }
             String content = Files.readString(safePath, StandardCharsets.UTF_8);
             String[] lines = content.split("\n");
             if (limit != null && limit < lines.length) {
@@ -136,6 +139,9 @@ public class FileUtils {
     public static String runEdit(String path, String oldText, String newText) {
         try {
             Path safePath = safePath(path);
+            if (!Files.exists(safePath)) {
+                return "Error: File not found at " + path;
+            }
             String content = Files.readString(safePath, StandardCharsets.UTF_8);
             if (!content.contains(oldText)) {
                 return "Error: Text not found in " + path;
@@ -150,6 +156,6 @@ public class FileUtils {
 
     public static void main(String[] args) throws IOException {
         System.out.println(runBash("dir"));
-        System.out.println(runRead("src/main/resources/application.yaml", 500));
+        System.out.println(runWrite(".\\test\\test1.txt", "abc"));
     }
 }
