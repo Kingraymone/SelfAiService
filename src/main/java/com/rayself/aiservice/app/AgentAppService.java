@@ -24,6 +24,12 @@ public class AgentAppService {
     private static final String USER_MSG_TEMPLATE = "[用户操作系统]：%s" +
             "\n" +
             "[用户消息]：%s";
+    public static final String SYSTEM_MESSAGE= String.format("User OS: %s. You are a coding agent at %s. Use the task tool to delegate exploration or subtasks." +
+                    "Prefer tools over prose.", System.getProperty("os.name").toLowerCase(),
+            Paths.get(System.getProperty("user.dir")));
+    public static final String SUB_SYSTEM_MESSAGE= String.format("User OS: %s. You are a coding agent at %s. Complete the given task, then summarize your findings." +
+                    "Prefer tools over prose.", System.getProperty("os.name").toLowerCase(),
+            Paths.get(System.getProperty("user.dir")));
     @Autowired
     ToolAppService toolAppService;
 
@@ -34,16 +40,14 @@ public class AgentAppService {
                 .baseUrl("https://api.deepseek.com")
                 .apiKey(System.getenv("deepseek-api-key"))
                 .modelName("deepseek-chat")
-                .temperature(0.5)
+                .temperature(0.3)
                 .timeout(ofSeconds(60))
                 .logRequests(true)
                 .logResponses(true)
                 .build();
         // todo 系统消息增加
         List<ChatMessage> messageList = new ArrayList<>();
-        SystemMessage systemMessage = SystemMessage.from(String.format("User OS: %s. You are a coding agent at %s.  Use the todo tool to plan multi-step tasks. Mark in_progress before starting, completed when done.\n" +
-                        "Prefer tools over prose.", System.getProperty("os.name").toLowerCase(),
-                Paths.get(System.getProperty("user.dir"))));
+        SystemMessage systemMessage = SystemMessage.from(SYSTEM_MESSAGE);
         messageList.add(systemMessage);
         messageList.add(UserMessage.from(String.format(message)));
         agentLoop(model, messageList);
@@ -63,8 +67,8 @@ public class AgentAppService {
             ChatRequest request = ChatRequest.builder()
                     .messages(messageList)
                     .parameters(ChatRequestParameters.builder()
-                            .temperature(0.5)
-                            .toolSpecifications(toolAppService.toolSpecification())
+                            .temperature(0.3)
+                            .toolSpecifications(toolAppService.parentToolSpecification())
                             .build())
                     .build();
             ChatResponse chatResponse = model.chat(request);
@@ -111,7 +115,7 @@ public class AgentAppService {
     }
 
 
-    public Map<String, Method> findToolMap() {
+    public static Map<String, Method> findToolMap() {
         Map<String, Method> map = new HashMap<>();
         for (Method method : ToolAppService.class.getDeclaredMethods()) {
             map.put(method.getName(), method);

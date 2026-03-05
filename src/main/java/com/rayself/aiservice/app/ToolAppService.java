@@ -5,15 +5,27 @@ import com.alibaba.fastjson.TypeReference;
 import com.rayself.aiservice.infrastructure.utils.FileUtils;
 import com.rayself.aiservice.infrastructure.utils.TodoManager;
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
-import dev.langchain4j.model.chat.request.json.JsonArraySchema;
+import dev.langchain4j.data.message.*;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.ObjectUtils;
+import org.springframework.util.StringUtils;
 
-import java.util.*;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
-import static com.fasterxml.jackson.databind.type.LogicalType.Map;
+import static com.rayself.aiservice.app.AgentAppService.SUB_SYSTEM_MESSAGE;
+import static com.rayself.aiservice.app.AgentAppService.findToolMap;
+import static java.time.Duration.ofSeconds;
 
 @Service
 @Slf4j
@@ -70,7 +82,7 @@ public class ToolAppService {
         return FileUtils.runEdit(path, oldText, newText);
     }
 
-    public static String todo(String arguments){
+    public static String todo(String arguments) {
         JSONObject jsonObject = JSONObject.parseObject(arguments);
         Object itemsArray = jsonObject.get("items");
         String itemsArrayStr = JSONObject.toJSONString(itemsArray);
@@ -80,7 +92,84 @@ public class ToolAppService {
         return todoManager.update(items);
     }
 
-    public List<ToolSpecification> toolSpecification() {
+    public String task(String arguments) {
+        JSONObject jsonObject = JSONObject.parseObject(arguments);
+        String prompt = jsonObject.getString("prompt");
+        OpenAiChatModel model = OpenAiChatModel.builder()
+                .baseUrl("https://api.deepseek.com")
+                .apiKey(System.getenv("deepseek-api-key"))
+                .modelName("deepseek-chat")
+                .temperature(0.3)
+                .timeout(ofSeconds(60))
+                .logRequests(true)
+                .logResponses(true)
+                .build();
+        // todo 系统消息增加
+        List<ChatMessage> messageList = new ArrayList<>();
+        SystemMessage systemMessage = SystemMessage.from(SUB_SYSTEM_MESSAGE);
+        messageList.add(systemMessage);
+        messageList.add(UserMessage.from(String.format(prompt)));
+        return subAgentLoop(model, messageList);
+    }
+
+    public String subAgentLoop(OpenAiChatModel model, List<ChatMessage> messageList) {
+        for (int i = 0; i < 20; i++) {
+            // 消息
+            ChatRequest request = ChatRequest.builder()
+                    .messages(messageList)
+                    .parameters(ChatRequestParameters.builder()
+                            .temperature(0.3)
+                            .toolSpecifications(childToolSpecification())
+                            .build())
+                    .build();
+            ChatResponse chatResponse = model.chat(request);
+            // 模型消息追加
+            messageList.add(chatResponse.aiMessage());
+            if (!chatResponse.aiMessage().hasToolExecutionRequests()) {
+                break;
+            }
+            // todo 获取执行结果中存在方法调用的信息，调用命令行参数
+            Map<String, Method> toolMap = findToolMap();
+            for (ToolExecutionRequest executionRequest : chatResponse.aiMessage().toolExecutionRequests()) {
+                Method method = toolMap.get(executionRequest.name());
+                if (ObjectUtils.isEmpty(method)) {
+                    continue;
+                }
+                String toolResultContent = "";
+                try {
+                    // 工具方法名匹配，获取参数执行方法调用
+                    Object result = method.invoke(this, executionRequest.arguments());
+                    toolResultContent = result.toString();
+                } catch (Exception e) {
+                    log.error(e.getMessage(), e);
+                    return e.getMessage();
+                }
+                messageList.add(ToolExecutionResultMessage.from(executionRequest, toolResultContent));
+            }
+        }
+        ChatMessage chatMessage = messageList.get(messageList.size() - 1);
+        if (chatMessage instanceof AiMessage) {
+            return ((AiMessage) chatMessage).text();
+        } else if (chatMessage instanceof UserMessage) {
+            return ((UserMessage) chatMessage).singleText();
+        }
+        return StringUtils.hasText(chatMessage.toString()) ? chatMessage.toString() : "(no summary)";
+    }
+
+    public List<ToolSpecification> parentToolSpecification() {
+        List<ToolSpecification> toolSpecifications = childToolSpecification();
+        toolSpecifications.add(ToolSpecification.builder()
+                .name("task")
+                .parameters(JsonObjectSchema.builder()
+                        .addStringProperty("prompt", "Short description of the task")
+                        .required("prompt")
+                        .build())
+                .description("Spawn a subagent with fresh context. It shares the filesystem but not conversation history.")
+                .build());
+        return toolSpecifications;
+    }
+
+    public List<ToolSpecification> childToolSpecification() {
         List<ToolSpecification> tools = new ArrayList<>();
         tools.add(ToolSpecification.builder()
                 .name("runBash")
@@ -118,23 +207,23 @@ public class ToolAppService {
                         .required("path", "oldText", "newText") // 必须明确指定必需的属性
                         .build())
                 .build());
-        tools.add(ToolSpecification.builder()
-                .name("todo")
-                .description("Update task list. Track progress on multi-step tasks.")
-                .parameters(JsonObjectSchema.builder()
-                        .addProperty("items",
-                                JsonArraySchema.builder()
-                                        .items(
-                                                JsonObjectSchema.builder()
-                                                        .addStringProperty("id", "任务的唯一标识符")
-                                                        .addStringProperty("text", "任务的具体内容")
-                                                        .addEnumProperty("status", Arrays.asList("pending", "in_progress", "completed"), "任务的当前状态。")
-                                                        .required("id", "text", "status")
-                                                        .build()
-                                        ).description("一个包含所有待办事项对象的列表。").build())
-                        .required("items")
-                        .build())
-                .build());
+//        tools.add(ToolSpecification.builder()
+//                .name("todo")
+//                .description("Update task list. Track progress on multi-step tasks.")
+//                .parameters(JsonObjectSchema.builder()
+//                        .addProperty("items",
+//                                JsonArraySchema.builder()
+//                                        .items(
+//                                                JsonObjectSchema.builder()
+//                                                        .addStringProperty("id", "任务的唯一标识符")
+//                                                        .addStringProperty("text", "任务的具体内容")
+//                                                        .addEnumProperty("status", Arrays.asList("pending", "in_progress", "completed"), "任务的当前状态。")
+//                                                        .required("id", "text", "status")
+//                                                        .build()
+//                                        ).description("一个包含所有待办事项对象的列表。").build())
+//                        .required("items")
+//                        .build())
+//                .build());
         return tools;
     }
 
