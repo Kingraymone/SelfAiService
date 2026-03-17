@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.TypeReference;
 import com.rayself.aiservice.infrastructure.utils.FileUtils;
 import com.rayself.aiservice.infrastructure.utils.TodoManager;
+import com.rayself.aiservice.skill.SkillLoader;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
@@ -112,6 +113,12 @@ public class ToolAppService {
         return subAgentLoop(model, messageList);
     }
 
+    public String loadSkill(String arguments){
+        JSONObject jsonObject = JSONObject.parseObject(arguments);
+        String name = jsonObject.getString("name");
+        return SkillLoader.SKILL_LOADER.getContent(name);
+    }
+
     public String subAgentLoop(OpenAiChatModel model, List<ChatMessage> messageList) {
         for (int i = 0; i < 20; i++) {
             // 消息
@@ -165,6 +172,14 @@ public class ToolAppService {
                         .required("prompt")
                         .build())
                 .description("Spawn a subagent with fresh context. It shares the filesystem but not conversation history.")
+                .build());
+        toolSpecifications.add(ToolSpecification.builder()
+                .name("loadSkill")
+                .parameters(JsonObjectSchema.builder()
+                        .addStringProperty("name", "Skill name to load")
+                        .required("name")
+                        .build())
+                .description("Load specialized knowledge by name.")
                 .build());
         return toolSpecifications;
     }

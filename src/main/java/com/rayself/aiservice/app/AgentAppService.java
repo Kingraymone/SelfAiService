@@ -1,5 +1,6 @@
 package com.rayself.aiservice.app;
 
+import com.rayself.aiservice.skill.SkillLoader;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.*;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -24,8 +25,8 @@ public class AgentAppService {
     private static final String USER_MSG_TEMPLATE = "[用户操作系统]：%s" +
             "\n" +
             "[用户消息]：%s";
-    public static final String SYSTEM_MESSAGE= String.format("User OS: %s. You are a coding agent at %s. Use the task tool to delegate exploration or subtasks." +
-                    "Prefer tools over prose.", System.getProperty("os.name").toLowerCase(),
+    public static final String SYSTEM_MESSAGE= String.format("User OS: %s. You are a coding agent at %s. Use load_skill to access specialized knowledge before tackling unfamiliar topics." +
+                    String.format("Skills available:%s", SkillLoader.SKILL_LOADER.getDescriptions()), System.getProperty("os.name").toLowerCase(),
             Paths.get(System.getProperty("user.dir")));
     public static final String SUB_SYSTEM_MESSAGE= String.format("User OS: %s. You are a coding agent at %s. Complete the given task, then summarize your findings." +
                     "Prefer tools over prose.", System.getProperty("os.name").toLowerCase(),
