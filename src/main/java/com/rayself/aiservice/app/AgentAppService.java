@@ -100,7 +100,7 @@ public class AgentAppService {
                 String toolResultContent = "";
                 try {
                     // 工具方法名匹配，获取参数执行方法调用
-                    if ("compcat".equalsIgnoreCase(executionRequest.name())) {
+                    if ("compact".equalsIgnoreCase(executionRequest.name())) {
                         manualCompact = true;
                     }
                     Object result = method.invoke(toolAppService, executionRequest.arguments());

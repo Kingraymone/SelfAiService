@@ -1,5 +1,6 @@
 package com.rayself.aiservice.util;
 
+import com.alibaba.fastjson.JSON;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -90,13 +91,13 @@ public class ConversationCompactManager {
 
             StringBuilder sb = new StringBuilder();
             for (ChatMessage msg : messages) {
-                sb.append(objectMapper.writeValueAsString(msg)).append("\n");
+                sb.append(JSON.toJSONString(msg)).append("\n");
             }
             Files.writeString(transcriptPath, sb.toString());
             System.out.println("[transcript saved: " + transcriptPath + "]");
 
             // Limit to ~80000 chars as in python
-            String fullText = objectMapper.writeValueAsString(messages);
+            String fullText = JSON.toJSONString(messages);
             conversationText = fullText.substring(0, Math.min(fullText.length(), 80000));
         } catch (Exception e) {
             throw new RuntimeException("Could not serialize messages for summary", e);
