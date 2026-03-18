@@ -1,14 +1,10 @@
 package com.rayself.aiservice.util;
 
-import com.alibaba.fastjson.JSON;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.ToolExecutionResultMessage;
-import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.message.*;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -91,13 +87,13 @@ public class ConversationCompactManager {
 
             StringBuilder sb = new StringBuilder();
             for (ChatMessage msg : messages) {
-                sb.append(JSON.toJSONString(msg)).append("\n");
+                sb.append(ChatMessageSerializer.messageToJson(msg)).append("\n");
             }
             Files.writeString(transcriptPath, sb.toString());
             System.out.println("[transcript saved: " + transcriptPath + "]");
 
             // Limit to ~80000 chars as in python
-            String fullText = JSON.toJSONString(messages);
+            String fullText = ChatMessageSerializer.messagesToJson(messages);
             conversationText = fullText.substring(0, Math.min(fullText.length(), 80000));
         } catch (Exception e) {
             throw new RuntimeException("Could not serialize messages for summary", e);
