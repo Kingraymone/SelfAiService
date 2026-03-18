@@ -1,6 +1,7 @@
 package com.rayself.aiservice.app;
 
 import com.rayself.aiservice.skill.SkillLoader;
+import com.rayself.aiservice.util.ConversationCompactManager;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.*;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -14,7 +15,10 @@ import org.springframework.util.ObjectUtils;
 
 import java.lang.reflect.Method;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static java.time.Duration.ofSeconds;
 
@@ -25,12 +29,13 @@ public class AgentAppService {
     private static final String USER_MSG_TEMPLATE = "[用户操作系统]：%s" +
             "\n" +
             "[用户消息]：%s";
-    public static final String SYSTEM_MESSAGE= String.format("User OS: %s. You are a coding agent at %s. Use load_skill to access specialized knowledge before tackling unfamiliar topics." +
+    public static final String SYSTEM_MESSAGE = String.format("User OS: %s. You are a coding agent at %s. Use load_skill to access specialized knowledge before tackling unfamiliar topics." +
                     String.format("Skills available:%s", SkillLoader.SKILL_LOADER.getDescriptions()), System.getProperty("os.name").toLowerCase(),
             Paths.get(System.getProperty("user.dir")));
-    public static final String SUB_SYSTEM_MESSAGE= String.format("User OS: %s. You are a coding agent at %s. Complete the given task, then summarize your findings." +
+    public static final String SUB_SYSTEM_MESSAGE = String.format("User OS: %s. You are a coding agent at %s. Complete the given task, then summarize your findings." +
                     "Prefer tools over prose.", System.getProperty("os.name").toLowerCase(),
             Paths.get(System.getProperty("user.dir")));
+    public static final int THRESHOLD = 50000;
     @Autowired
     ToolAppService toolAppService;
 
@@ -64,6 +69,12 @@ public class AgentAppService {
     private void agentLoop(OpenAiChatModel model, List<ChatMessage> messageList) {
         int roundsSinceTodo = 0;
         while (true) {
+            // 每次调用前压缩对话--第一层级
+            messageList = ConversationCompactManager.microCompact(messageList);
+            // 大于token阈值后调用llm压缩--第二层级
+            if (ConversationCompactManager.estimateTokens(messageList) > THRESHOLD) {
+                messageList = ConversationCompactManager.autoCompact(model, messageList);
+            }
             // 消息
             ChatRequest request = ChatRequest.builder()
                     .messages(messageList)
@@ -80,6 +91,7 @@ public class AgentAppService {
             }
             // todo 获取执行结果中存在方法调用的信息，调用命令行参数
             Map<String, Method> toolMap = findToolMap();
+            boolean manualCompact = false;
             for (ToolExecutionRequest executionRequest : chatResponse.aiMessage().toolExecutionRequests()) {
                 Method method = toolMap.get(executionRequest.name());
                 if (ObjectUtils.isEmpty(method)) {
@@ -88,6 +100,9 @@ public class AgentAppService {
                 String toolResultContent = "";
                 try {
                     // 工具方法名匹配，获取参数执行方法调用
+                    if ("compcat".equalsIgnoreCase(executionRequest.name())) {
+                        manualCompact = true;
+                    }
                     Object result = method.invoke(toolAppService, executionRequest.arguments());
                     toolResultContent = result.toString();
                 } catch (Exception e) {
@@ -97,7 +112,7 @@ public class AgentAppService {
                 messageList.add(ToolExecutionResultMessage.from(executionRequest, toolResultContent));
                 roundsSinceTodo = executionRequest.name().equalsIgnoreCase("todo") ? 0 : roundsSinceTodo + 1;
                 // 工具调用多次后还未进行任务状态更新，进行强调提示
-                if(roundsSinceTodo>5){
+                if (roundsSinceTodo > 5) {
                     messageList.add(UserMessage.from("<reminder>Check the actual execution status of the task,if necessary update the task to-do list.</reminder>"));
                     // fixme 模型会选择最简单满足约束的方法导致任务被直接更新 <reminder>
                     //Review the todo list.
@@ -110,6 +125,10 @@ public class AgentAppService {
                     //
                     //Do NOT change task status unless you have evidence.
                     //</reminder>
+                }
+                if (manualCompact) {
+                    log.info("Manual compression requested.");
+                    messageList = ConversationCompactManager.autoCompact(model, messageList);
                 }
             }
         }

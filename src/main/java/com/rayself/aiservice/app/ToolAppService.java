@@ -113,10 +113,15 @@ public class ToolAppService {
         return subAgentLoop(model, messageList);
     }
 
-    public String loadSkill(String arguments){
+    public String loadSkill(String arguments) {
         JSONObject jsonObject = JSONObject.parseObject(arguments);
         String name = jsonObject.getString("name");
         return SkillLoader.SKILL_LOADER.getContent(name);
+    }
+
+    public String compact(String arguments) {
+        log.info("Manual compression requested.");
+        return "Compressing...";
     }
 
     public String subAgentLoop(OpenAiChatModel model, List<ChatMessage> messageList) {
@@ -220,6 +225,14 @@ public class ToolAppService {
                         .addStringProperty("oldText", "旧文件内容")
                         .addStringProperty("newText", "新文件内容")
                         .required("path", "oldText", "newText") // 必须明确指定必需的属性
+                        .build())
+                .build());
+        tools.add(ToolSpecification.builder()
+                .name("compact")
+                .description("Trigger manual conversation compression.")
+                .parameters(JsonObjectSchema.builder()
+                        .addStringProperty("focus", "What to preserve in the summary")
+                        .required("focus") // 必须明确指定必需的属性
                         .build())
                 .build());
 //        tools.add(ToolSpecification.builder()
