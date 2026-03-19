@@ -1,5 +1,6 @@
 package com.rayself.aiservice.app;
 
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.TypeReference;
 import com.rayself.aiservice.infrastructure.utils.FileUtils;
@@ -140,8 +141,10 @@ public class ToolAppService {
         JSONObject jsonObject = JSONObject.parseObject(arguments);
         Integer taskId = jsonObject.getInteger("taskId");
         String status = jsonObject.getString("status");
-        List<Integer> addBlockedBy = jsonObject.getJSONArray("addBlockedBy").toJavaList(Integer.class);
-        List<Integer> addBlocks = jsonObject.getJSONArray("addBlocks").toJavaList(Integer.class);
+        JSONArray addBlockedByArray = jsonObject.getJSONArray("addBlockedBy");
+        List<Integer> addBlockedBy = ObjectUtils.isEmpty(addBlockedByArray) ? null : addBlockedByArray.toJavaList(Integer.class);
+        JSONArray addBlocksArray = jsonObject.getJSONArray("addBlocks");
+        List<Integer> addBlocks = ObjectUtils.isEmpty(addBlocksArray) ? null : addBlocksArray.toJavaList(Integer.class);
         TaskManager.update(taskId, status, addBlockedBy, addBlocks);
         return "task update success";
     }
