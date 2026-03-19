@@ -5,12 +5,15 @@ import com.alibaba.fastjson.TypeReference;
 import com.rayself.aiservice.infrastructure.utils.FileUtils;
 import com.rayself.aiservice.infrastructure.utils.TodoManager;
 import com.rayself.aiservice.skill.SkillLoader;
+import com.rayself.aiservice.task.TaskManager;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.*;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
+import dev.langchain4j.model.chat.request.json.JsonArraySchema;
+import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -21,6 +24,7 @@ import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -122,6 +126,34 @@ public class ToolAppService {
     public String compact(String arguments) {
         log.info("Manual compression requested.");
         return "Compressing...";
+    }
+
+    public String taskCreate(String arguments) {
+        JSONObject jsonObject = JSONObject.parseObject(arguments);
+        String subject = jsonObject.getString("subject");
+        String description = jsonObject.getString("description");
+        TaskManager.create(subject, description);
+        return "task create success";
+    }
+
+    public String taskUpdate(String arguments) {
+        JSONObject jsonObject = JSONObject.parseObject(arguments);
+        Integer taskId = jsonObject.getInteger("taskId");
+        String status = jsonObject.getString("status");
+        List<Integer> addBlockedBy = jsonObject.getJSONArray("addBlockedBy").toJavaList(Integer.class);
+        List<Integer> addBlocks = jsonObject.getJSONArray("addBlocks").toJavaList(Integer.class);
+        TaskManager.update(taskId, status, addBlockedBy, addBlocks);
+        return "task update success";
+    }
+
+    public String taskList(String arguments) {
+        return TaskManager.listAll();
+    }
+
+    public String taskGet(String arguments) {
+        JSONObject jsonObject = JSONObject.parseObject(arguments);
+        Integer taskId = jsonObject.getInteger("taskId");
+        return TaskManager.get(taskId);
     }
 
     public String subAgentLoop(OpenAiChatModel model, List<ChatMessage> messageList) {
@@ -233,6 +265,40 @@ public class ToolAppService {
                 .parameters(JsonObjectSchema.builder()
                         .addStringProperty("focus", "What to preserve in the summary")
                         .required("focus") // 必须明确指定必需的属性
+                        .build())
+                .build());
+        tools.add(ToolSpecification.builder()
+                .name("taskCreate")
+                .description("Create a new task.")
+                .parameters(JsonObjectSchema.builder()
+                        .addStringProperty("subject")
+                        .addStringProperty("description")
+                        .required("subject") // 必须明确指定必需的属性
+                        .build())
+                .build());
+        tools.add(ToolSpecification.builder()
+                .name("taskUpdate")
+                .description("Update a task's status or dependencies.")
+                .parameters(JsonObjectSchema.builder()
+                        .addIntegerProperty("taskId")
+                        .addEnumProperty("status", Arrays.asList("pending", "in_progress", "completed"))
+                        .addProperty("addBlockedBy", JsonArraySchema.builder().items(JsonIntegerSchema.builder().build()).build())
+                        .addProperty("addBlocks", JsonArraySchema.builder().items(JsonIntegerSchema.builder().build()).build())
+                        .required("taskId") // 必须明确指定必需的属性
+                        .build())
+                .build());
+        tools.add(ToolSpecification.builder()
+                .name("taskList")
+                .description("List all tasks with status summary.")
+                .parameters(JsonObjectSchema.builder()
+                        .build())
+                .build());
+        tools.add(ToolSpecification.builder()
+                .name("taskGet")
+                .description("Get full details of a task by ID.")
+                .parameters(JsonObjectSchema.builder()
+                        .addIntegerProperty("taskId")
+                        .required("taskId")
                         .build())
                 .build());
 //        tools.add(ToolSpecification.builder()

@@ -29,7 +29,7 @@ public class AgentAppService {
     private static final String USER_MSG_TEMPLATE = "[用户操作系统]：%s" +
             "\n" +
             "[用户消息]：%s";
-    public static final String SYSTEM_MESSAGE = String.format("User OS: %s. You are a coding agent at %s. Use load_skill to access specialized knowledge before tackling unfamiliar topics." +
+    public static final String SYSTEM_MESSAGE = String.format("User OS: %s. You are a coding agent at %s. Use task tools to plan and track work." +
                     String.format("Skills available:%s", SkillLoader.SKILL_LOADER.getDescriptions()), System.getProperty("os.name").toLowerCase(),
             Paths.get(System.getProperty("user.dir")));
     public static final String SUB_SYSTEM_MESSAGE = String.format("User OS: %s. You are a coding agent at %s. Complete the given task, then summarize your findings." +
@@ -113,7 +113,7 @@ public class AgentAppService {
                 roundsSinceTodo = executionRequest.name().equalsIgnoreCase("todo") ? 0 : roundsSinceTodo + 1;
                 // 工具调用多次后还未进行任务状态更新，进行强调提示
                 if (roundsSinceTodo > 5) {
-                    messageList.add(UserMessage.from("<reminder>Check the actual execution status of the task,if necessary update the task to-do list.</reminder>"));
+//                    messageList.add(UserMessage.from("<reminder>Check the actual execution status of the task,if necessary update the task to-do list.</reminder>"));
                     // fixme 模型会选择最简单满足约束的方法导致任务被直接更新 <reminder>
                     //Review the todo list.
                     //
